@@ -1,15 +1,22 @@
 from __future__ import annotations
-
+from functools import wraps
 from typing import Optional, Tuple, Union
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from flask.typing import ResponseReturnValue
+import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
 from firebase_admin.firestore import DocumentReference
 import os
+from firebase_admin import auth
+import secrets
+
+#print(secrets.token_hex(32))
+
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+WEB_API_KEY = os.environ.get("FIREBASE_WEB_API_KEY")
 
 # A dummy user for the login. 
 dummy_user = {
@@ -24,6 +31,47 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "GET":
+        return render_template("signup.html")
+
+    email = request.form.get("email")
+    password = request.form.get("password")
+    confirm_password = request.form.get("confirm_password")
+
+    # Validate passwords match
+    if password != confirm_password:
+        return render_template("signup.html", error="Passwords do not match")
+
+    user = auth.create_user(email=email, password=password)
+
+    db.collection("profiles").document(user.uid).set({
+        "email": email,
+        "role": "user"
+    })
+    return redirect(url_for("login"))
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 1. Grab the expected key from the environment
+        expected_key = os.environ.get("SENSOR_API_KEY")
+
+        # 2. Grab the provided key from the request headers
+        requested_key = request.headers.get("X-API-Key")
+        # TODO: Get "X-API-Key" from request.headers
+
+        # 3. Compare them
+        # TODO: If they don't match, return jsonify({"error": "Unauthorized"}), 401
+        if expected_key != requested_key:
+            return jsonify({"error": "Unauthorized"}), 401
+        # 4. If they match, allow the route to execute normally
+        return f(*args, **kwargs)
+    return decorated_function
+@app.route("/api/sensor_data", methods=["POST"])
+@require_api_key
+
 def get_current_user():
     """Return the currently logged-in username (or None).
 
@@ -37,10 +85,18 @@ def get_current_user():
 
 def get_user_or_401():
     """Return the current API user or an Unauthorized response."""
-    current_user = get_current_user()
-    if not current_user:
+    #current_user = get_current_user()
+    header = request.headers.get("Authorization")
+    if not header or not header.startswith("Bearer "):
+        return None, "Invalid authentication credentials"
+
+    token = header.split(" ")[1]
+    try:
+        decoded = auth.verify_id_token(token)
+        return decoded["uid"], None
+    except Exception as e:
         return jsonify({"error": "Unauthorized"}), 401
-    return current_user
+
 
 
 def get_profile_doc_ref(username: str):
@@ -97,6 +153,16 @@ def home():
         return render_template("dashboard.html", username=current_user)
     return redirect(url_for("login"))
 
+@app.route("/login", methods=["POST"])
+def api_login():
+    data = request.json
+    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={WEB_API_KEY}"
+    payload = {"email": data["email"], "password": data["password"], "returnSecureToken": True}
+
+    res = requests.post(url, json=payload)
+    if res.status_code == 200:
+        return jsonify({"token": res.json()["idToken"]}), 200
+    return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
