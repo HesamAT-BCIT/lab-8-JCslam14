@@ -1,5 +1,6 @@
 from __future__ import annotations
 from functools import wraps
+import re
 from typing import Optional, Tuple, Union
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from flask.typing import ResponseReturnValue
@@ -274,16 +275,27 @@ def api_update_profile():
     first_name = data.get("first_name")
     last_name = data.get("last_name")
     student_id = data.get("student_id")
-
+    errors = []
+    allowed = {"first_name", "last_name", "student_id"}
     # Prepare the update data (only include provided fields)
-    update_data = {}
+    if unknown := set(data.keys()) - allowed:
+        errors.append(f"Unknown fields: {unknown}")
+
+    if len(data.get("first_name","")) > 50:
+        errors.append("First name too long (must be less than 50 characters)")
+
+    sid = data.get("student_id", "")
+    if not re.match(r"^[A-Za-z0-9]{8,9}$", sid):
+        errors.append(f"Student ID must have 8-9 alphanumeric characters only")
+    update_data = data
+    '''
     if first_name is not None:
         update_data["first_name"] = first_name.strip() if first_name else ""
     if last_name is not None:
         update_data["last_name"] = last_name.strip() if last_name else ""
     if student_id is not None:
         update_data["student_id"] = str(student_id).strip() if student_id else ""
-
+    '''
     if not update_data:
         return jsonify({"error": "No updatable fields provided"}), 400
 
