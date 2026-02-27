@@ -71,6 +71,9 @@ def require_api_key(f):
     return decorated_function
 @app.route("/api/sensor_data", methods=["POST"])
 @require_api_key
+def sensor_data():
+    data = request.json
+    return jsonify({"data": data, "status": "success"}), 200
 
 def get_current_user():
     """Return the currently logged-in username (or None).
