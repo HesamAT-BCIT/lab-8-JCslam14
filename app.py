@@ -96,7 +96,7 @@ def get_user_or_401():
     token = header.split(" ")[1]
     try:
         decoded = auth.verify_id_token(token)
-        return decoded["uid"], None
+        return decoded["uid"]
     except Exception as e:
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -261,6 +261,7 @@ def api_update_profile():
     """Update the current user's profile from a JSON body."""
     user_or_response = get_user_or_401()
     if not isinstance(user_or_response, str):
+        print(user_or_response)
         return user_or_response
 
     username = user_or_response
@@ -296,13 +297,14 @@ def api_update_profile():
     if student_id is not None:
         update_data["student_id"] = str(student_id).strip() if student_id else ""
     '''
-    if not update_data:
-        return jsonify({"error": "No updatable fields provided"}), 400
+    if errors:
+        return jsonify({"error": errors}), 400
 
     # Merge update into existing document (or create if missing).
     set_profile(username, update_data, merge=True)
 
     updated_profile = get_profile_data(username)
+    print(updated_profile)
     return jsonify({"message": "Profile updated successfully", "profile": updated_profile}), 200
 
 
