@@ -60,10 +60,9 @@ def require_api_key(f):
 
         # 2. Grab the provided key from the request headers
         requested_key = request.headers.get("X-API-Key")
-        # TODO: Get "X-API-Key" from request.headers
+
 
         # 3. Compare them
-        # TODO: If they don't match, return jsonify({"error": "Unauthorized"}), 401
         if expected_key != requested_key:
             return jsonify({"error": "Unauthorized"}), 401
         # 4. If they match, allow the route to execute normally
@@ -73,7 +72,7 @@ def require_api_key(f):
 @require_api_key
 def sensor_data():
     data = request.json
-    return jsonify({"data": data, "status": "success"}), 200
+    return jsonify({"status": "success","data": data,}), 200
 
 def get_current_user():
     """Return the currently logged-in username (or None).
